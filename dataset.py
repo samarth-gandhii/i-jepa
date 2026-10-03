@@ -55,22 +55,28 @@ def load_captions(captions_path: str) -> Dict[str, List[str]]:
 
 def build_pairs(
     captions_dict: Dict[str, List[str]],
-    images_dir: str,
+    images_dir: str = "",
 ) -> List[Tuple[str, str]]:
     """
-    Flatten captions_dict into (image_path, caption) pairs.
+    Flatten captions_dict into (image_path_or_filename, caption) pairs.
 
-    Only includes images that actually exist on disk so we never crash
-    during training because of a missing file.
+    If images_dir exists on disk, filters to images present on disk.
+    If images_dir is missing/empty (e.g. running on Colab with cached features.pt),
+    uses filenames directly without requiring raw .jpg files.
     """
     pairs: List[Tuple[str, str]] = []
+    check_disk = bool(images_dir and os.path.isdir(images_dir))
     missing = 0
 
     for filename, caps in captions_dict.items():
-        img_path = os.path.join(images_dir, filename)
-        if not os.path.isfile(img_path):
-            missing += 1
-            continue
+        if check_disk:
+            img_path = os.path.join(images_dir, filename)
+            if not os.path.isfile(img_path):
+                missing += 1
+                continue
+        else:
+            img_path = filename
+
         for cap in caps:
             pairs.append((img_path, cap))
 

@@ -1,4 +1,6 @@
-data
+data/Images
+data/*.png
+*.png
 models
 venv
 __pycache__
