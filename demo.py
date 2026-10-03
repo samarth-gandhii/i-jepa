@@ -50,7 +50,7 @@ def load_models(checkpoint_path: str, use_fallback: bool):
 
     # Caption model
     print(f"Loading checkpoint: {checkpoint_path}")
-    ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+    ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
 
     projector = ProjectorMLP()
     projector.load_state_dict(ckpt["projector_state"])
@@ -89,11 +89,7 @@ def caption_image(image: Image.Image) -> str:
         feature = extract_single_feature(
             tmp_path, ENCODER, PROCESSOR, ACTUAL_DIM, DEVICE
         )
-        caption = CAPTION_MODEL.generate(
-            feature,
-            max_new_tokens=50,
-            num_beams=3,
-        )
+        caption = CAPTION_MODEL.generate(feature)
         return caption
     finally:
         os.unlink(tmp_path)
@@ -103,10 +99,7 @@ def caption_image(image: Image.Image) -> str:
 # Gradio UI
 # ---------------------------------------------------------------------------
 def build_ui() -> gr.Blocks:
-    with gr.Blocks(
-        title="🖼️ Image Captioning Demo",
-        theme=gr.themes.Soft(),
-    ) as demo:
+    with gr.Blocks(title="🖼️ Image Captioning Demo") as demo:
         gr.Markdown(
             """
             # 🖼️ Image Captioning Demo

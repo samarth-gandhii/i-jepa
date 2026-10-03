@@ -163,36 +163,43 @@ class CaptionModel(nn.Module):
     def generate(
         self,
         image_features: torch.Tensor,   # [1, 1280]  (single image)
-        max_new_tokens: int = 50,
-        num_beams: int = 3,
-        no_repeat_ngram_size: int = 2,
+        max_new_tokens: int = 35,
+        num_beams: int = 4,
         temperature: float = 1.0,
     ) -> str:
         """
-        Generate a caption for a single image.
-
-        Uses beam search with n-gram blocking to reduce repetition.
+        Generate a clean caption for a single image.
         """
         self.eval()
 
         # Build prefix embeddings as the initial context
         prefix_embeds = self.projector(image_features)  # [1, P, 768]
 
-        # Generate — GPT-2's .generate() accepts inputs_embeds
+        # Generate using beam search with repetition penalty
         output_ids = self.gpt2.generate(
             inputs_embeds=prefix_embeds,
             max_new_tokens=max_new_tokens,
             num_beams=num_beams,
-            no_repeat_ngram_size=no_repeat_ngram_size,
+            repetition_penalty=1.2,
             temperature=temperature,
             early_stopping=True,
             pad_token_id=self.tokenizer.eos_token_id,
             eos_token_id=self.tokenizer.eos_token_id,
         )
 
-        # Decode (skip any special tokens)
-        caption = self.tokenizer.decode(output_ids[0], skip_special_tokens=True)
-        return caption.strip()
+        # Decode (skip special tokens)
+        raw_caption = self.tokenizer.decode(output_ids[0], skip_special_tokens=True).strip()
+
+        # Clean sentence boundary: stop at the first period
+        if "." in raw_caption:
+            idx = raw_caption.find(".")
+            # Ensure it's not a short prefix like "A." or "Dr."
+            if idx > 8:
+                raw_caption = raw_caption[:idx + 1]
+
+        # Fix tokenization artifacts like "word ." -> "word."
+        cleaned = raw_caption.replace(" .", ".").replace(" ,", ",").replace(" '", "'").strip()
+        return cleaned
 
 
 # ---------------------------------------------------------------------------

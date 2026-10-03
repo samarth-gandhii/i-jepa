@@ -117,7 +117,7 @@ def main():
 
     # --- Load checkpoint ----------------------------------------------------
     print(f"Loading checkpoint: {args.checkpoint}")
-    ckpt = torch.load(args.checkpoint, map_location="cpu", weights_only=True)
+    ckpt = torch.load(args.checkpoint, map_location="cpu", weights_only=False)
 
     # Rebuild model
     projector = ProjectorMLP()

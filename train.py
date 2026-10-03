@@ -74,9 +74,12 @@ class CaptionFeatureDataset(Dataset):
         # Feature vector (convert float16 → float32 for training)
         feat = self.features[fname].float()
 
+        # Append eos_token so GPT-2 learns when to stop naturally
+        caption_text = caption.strip() + " " + self.tokenizer.eos_token
+
         # Tokenize caption
         enc = self.tokenizer(
-            caption,
+            caption_text,
             max_length=self.max_length,
             padding="max_length",
             truncation=True,
@@ -164,11 +167,35 @@ def train(args):
     n_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Trainable parameters: {n_trainable:,}")
 
-    # --- Training -----------------------------------------------------------
+    # --- Resume from checkpoint ---------------------------------------------
+    start_epoch = 1
     best_val_loss = float("inf")
     best_epoch = -1
 
-    for epoch in range(1, args.epochs + 1):
+    if args.resume:
+        if os.path.isfile(args.resume):
+            print(f"🔄  Resuming from checkpoint: {args.resume}")
+            ckpt = torch.load(args.resume, map_location=device, weights_only=False)
+            model.projector.load_state_dict(ckpt["projector_state"])
+            if args.unfreeze_gpt2 and ckpt.get("gpt2_state") is not None:
+                model.gpt2.load_state_dict(ckpt["gpt2_state"])
+            if "optimizer_state" in ckpt and ckpt["optimizer_state"] is not None:
+                try:
+                    optimizer.load_state_dict(ckpt["optimizer_state"])
+                except Exception as e:
+                    print(f"   ⚠️  Could not restore optimizer state ({e}), starting fresh optimizer.")
+            best_val_loss = ckpt.get("val_loss", float("inf"))
+            prev_epoch = ckpt.get("epoch", 0)
+            start_epoch = prev_epoch + 1
+            print(f"   Loaded checkpoint from epoch {prev_epoch} (val loss: {best_val_loss:.4f})")
+            if start_epoch > args.epochs:
+                args.epochs = prev_epoch + args.epochs
+                print(f"   Target epochs adjusted to {args.epochs}")
+        else:
+            print(f"⚠️  Checkpoint not found at {args.resume}, starting from scratch.")
+
+    # --- Training -----------------------------------------------------------
+    for epoch in range(start_epoch, args.epochs + 1):
         # ---- Train ---------------------------------------------------------
         model.train()
         train_loss_sum = 0.0
@@ -227,6 +254,7 @@ def train(args):
                     "val_loss": avg_val_loss,
                     "projector_state": model.projector.state_dict(),
                     "gpt2_state": model.gpt2.state_dict() if args.unfreeze_gpt2 else None,
+                    "optimizer_state": optimizer.state_dict(),
                     "args": vars(args),
                 },
                 ckpt_path,
@@ -247,6 +275,8 @@ def main():
     parser.add_argument("--images_dir", type=str, default=None)
     parser.add_argument("--features_path", type=str, default=None)
     parser.add_argument("--checkpoint_dir", type=str, default=None)
+    parser.add_argument("--resume", type=str, default=None,
+                        help="Path to checkpoint to resume from (e.g. checkpoints/best.pt).")
 
     # Training
     parser.add_argument("--epochs", type=int, default=8)
